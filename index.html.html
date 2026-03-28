@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Симулятор фидера 10 кВ с ЭЗС</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-100 p-6 font-sans">
+    
+    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-xl font-bold text-slate-800 mb-4">Параметры сети</h2>
+            
+            <div class="space-y-4">
+                <div class="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <h3 class="font-semibold text-slate-700 mb-2">Участок 1 (от ПС)</h3>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <label class="block text-slate-500 text-xs">Длина (км)</label>
+                            <input type="number" id="l1" value="1.5" step="0.1" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                        <div>
+                            <label class="block text-slate-500 text-xs">Баз. Нагрузка P (кВт)</label>
+                            <input type="number" id="p1" value="500" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <h3 class="font-semibold text-slate-700 mb-2">Участок 2</h3>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                            <label class="block text-slate-500 text-xs">Длина (км)</label>
+                            <input type="number" id="l2" value="0.8" step="0.1" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                        <div>
+                            <label class="block text-slate-500 text-xs">Баз. Нагрузка P (кВт)</label>
+                            <input type="number" id="p2" value="400" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <h3 class="font-semibold text-blue-800 mb-2">Участок 3 (Конец линии)</h3>
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-2">
+                        <div>
+                            <label class="block text-slate-500 text-xs">Длина (км)</label>
+                            <input type="number" id="l3" value="1.2" step="0.1" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                        <div>
+                            <label class="block text-slate-500 text-xs">Баз. Нагрузка P (кВт)</label>
+                            <input type="number" id="p3" value="300" class="w-full p-1 border rounded" onchange="calculate()">
+                        </div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-blue-200">
+                        <label class="block text-blue-700 font-bold text-xs mb-1">Мощность зарядных станций (кВт)</label>
+                        <input type="range" id="ev_power" min="0" max="1000" step="50" value="0" class="w-full" oninput="updateEvLabel(); calculate()">
+                        <div class="text-right text-blue-800 font-bold mt-1"><span id="ev_val">0</span> кВт</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            
+            <div class="p-6 border-b border-slate-100 flex justify-between bg-slate-50">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Профиль напряжения</h1>
+                </div>
+                <div class="flex gap-6 text-sm">
+                    <div>
+                        <div class="text-slate-500 text-xs uppercase">Напряжение в конце</div>
+                        <div id="end_volt" class="font-bold text-xl text-slate-800">10000 V</div>
+                    </div>
+                    <div>
+                        <div class="text-slate-500 text-xs uppercase">Просадка (%)</div>
+                        <div id="drop_percent" class="font-bold text-xl text-green-600">0.00%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 flex-grow">
+                <div class="h-80 w-full">
+                    <canvas id="voltageChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация графика
+        const ctx = document.getElementById('voltageChart').getContext('2d');
+        const voltageChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['ПС', 'Узел 1', 'Узел 2', 'Конец линии'],
+                datasets: [{
+                    label: 'Напряжение (В)',
+                    data: [10000, 10000, 10000, 10000],
+                    borderColor: '#2563eb',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#2563eb',
+                    pointRadius: 6,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 9000, max: 10100 }
+                }
+            }
+        });
+
+        // Обновление цифры на ползунке ЭЗС
+        function updateEvLabel() {
+            document.getElementById('ev_val').innerText = document.getElementById('ev_power').value;
+        }
+
+        // ОСНОВНАЯ ФУНКЦИЯ РАСЧЕТА (вызывается при любом изменении полей)
+        function calculate() {
+            const u_nom = 10.0; // 10 кВ
+            const r0 = 0.33;    // Ом/км (базовое для кабеля)
+            const x0 = 0.08;    // Ом/км
+
+            // Считываем длины
+            const L = [
+                parseFloat(document.getElementById('l1').value),
+                parseFloat(document.getElementById('l2').value),
+                parseFloat(document.getElementById('l3').value)
+            ];
+
+            // Считываем активную мощность (реактивную пока берем константой для простоты Q = 0.4 * P)
+            const ev_p = parseFloat(document.getElementById('ev_power').value);
+            const P_nodes = [
+                parseFloat(document.getElementById('p1').value),
+                parseFloat(document.getElementById('p2').value),
+                parseFloat(document.getElementById('p3').value) + ev_p // ЭЗС сидит на конце линии
+            ];
+            const Q_nodes = P_nodes.map(p => p * 0.4);
+
+            // ШАГ 1: Потоки мощности (с конца к началу)
+            let flow_P = [0, 0, 0];
+            let flow_Q = [0, 0, 0];
+            
+            flow_P[2] = P_nodes[2];
+            flow_Q[2] = Q_nodes[2];
+            
+            flow_P[1] = flow_P[2] + P_nodes[1];
+            flow_Q[1] = flow_Q[2] + Q_nodes[1];
+            
+            flow_P[0] = flow_P[1] + P_nodes[0];
+            flow_Q[0] = flow_Q[1] + Q_nodes[0];
+
+            // ШАГ 2: Падение напряжения (от ПС к концу)
+            let voltages = [10000]; // Старт с 10000 В
+            let current_v_kv = u_nom;
+
+            for(let i=0; i<3; i++) {
+                let r = r0 * L[i];
+                let x = x0 * L[i];
+                
+                // Формула: (PR + QX) / U_nom
+                let delta_u_kv = (flow_P[i] * r + flow_Q[i] * x) / (u_nom * 1000);
+                current_v_kv -= delta_u_kv;
+                
+                voltages.push(Math.round(current_v_kv * 1000)); // переводим обратно в Вольты
+            }
+
+            // ШАГ 3: Обновление интерфейса
+            let endVoltage = voltages[3];
+            let dropPercent = ((10000 - endVoltage) / 10000) * 100;
+
+            document.getElementById('end_volt').innerText = endVoltage + " V";
+            let dropEl = document.getElementById('drop_percent');
+            dropEl.innerText = dropPercent.toFixed(2) + "%";
+            
+            // Меняем цвет, если просадка больше 5%
+            if(dropPercent > 5) {
+                dropEl.className = "font-bold text-xl text-red-600";
+            } else {
+                dropEl.className = "font-bold text-xl text-green-600";
+            }
+
+            // Обновляем точки на графике
+            voltageChart.data.datasets[0].data = voltages;
+            voltageChart.update();
+        }
+
+        // Запускаем расчет один раз при загрузке страницы
+        calculate();
+    </script>
+</body>
+</html>
